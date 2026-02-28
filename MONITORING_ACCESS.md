@@ -1,26 +1,29 @@
 # Monitoring Access Guide
 
-## 🎯 Quick Access to Grafana and Prometheus
+## Quick Access to Grafana and Prometheus
 
 This guide shows you how to access Grafana and Prometheus through AWS Load Balancers with easily identifiable names.
 
-## 📋 Prerequisites
+## Prerequisites
 
 Monitoring must be enabled in your Terraform configuration:
+
 ```bash
 # In terraform/variables.tf, ensure:
 enable_monitoring = true
 ```
 
-## 🚀 Deployment
+## Deployment
 
 ### Step 1: Apply Terraform Configuration
+
 ```bash
 cd terraform
 terraform apply --auto-approve
 ```
 
 ### Step 2: Wait for Load Balancers to be Ready
+
 ```bash
 # Check monitoring pods are running
 kubectl get pods -n monitoring
@@ -29,27 +32,31 @@ kubectl get pods -n monitoring
 kubectl get svc -n monitoring
 ```
 
-## 🔍 Finding Your Load Balancers in AWS Console
+## Finding Your Load Balancers in AWS Console
 
 ### In AWS Console:
+
 1. Go to **EC2 > Load Balancers**
 2. Look for these specific names:
 
-| Service | Load Balancer Name | Port |
-|---------|-------------------|------|
-| **Grafana** | `retail-store-grafana` | 80 |
-| **Prometheus** | `retail-store-prometheus` | 9090 |
-| **AlertManager** | `retail-store-alertmanager` | 9093 |
-| **ArgoCD** | `retail-store-argocd-server` | 80 |
+| Service          | Load Balancer Name           | Port |
+| ---------------- | ---------------------------- | ---- |
+| **Grafana**      | `retail-store-grafana`       | 80   |
+| **Prometheus**   | `retail-store-prometheus`    | 9090 |
+| **AlertManager** | `retail-store-alertmanager`  | 9093 |
+| **ArgoCD**       | `retail-store-argocd-server` | 80   |
 
 ### Filter by Name:
+
 In the AWS Load Balancers console, use the search/filter:
+
 - Type: `retail-store-grafana`
 - Type: `retail-store-prometheus`
 
-## 🌐 Getting Access URLs
+## Getting Access URLs
 
 ### Option 1: Using Terraform Outputs
+
 ```bash
 cd terraform
 
@@ -67,6 +74,7 @@ terraform output grafana_credentials
 ```
 
 ### Option 2: Using kubectl Commands
+
 ```bash
 # Get Grafana URL
 echo "http://$(kubectl get svc -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
@@ -79,6 +87,7 @@ echo "http://$(kubectl get svc -n monitoring kube-prometheus-stack-alertmanager 
 ```
 
 ### Option 3: Direct kubectl Query
+
 ```bash
 # List all monitoring services with their external IPs
 kubectl get svc -n monitoring -o wide
@@ -87,35 +96,40 @@ kubectl get svc -n monitoring -o wide
 kubectl describe svc kube-prometheus-stack-grafana -n monitoring
 ```
 
-## 🔐 Login Credentials
+## Login Credentials
 
 ### Grafana
+
 - **URL**: `http://<grafana-loadbalancer-hostname>`
 - **Username**: `admin`
 - **Password**: `admin123`
-- ⚠️ **IMPORTANT**: Change this password in production!
+- **IMPORTANT**: Change this password in production!
 
 ### Prometheus
+
 - **URL**: `http://<prometheus-loadbalancer-hostname>:9090`
 - **Authentication**: None (add authentication for production!)
 
-## 📊 What You'll See
+## What You'll See
 
 ### Grafana Dashboard
+
 - Pre-configured Prometheus datasource
 - Default Kubernetes monitoring dashboards
 - Cluster metrics, pod metrics, node metrics
 - Custom dashboard creation available
 
 ### Prometheus UI
+
 - Metrics explorer
 - Query interface (PromQL)
 - Targets status
 - Alerts configuration
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 ### Load Balancer Not Showing Up
+
 ```bash
 # Check if service is created
 kubectl get svc -n monitoring
@@ -129,6 +143,7 @@ terraform output monitoring_enabled
 ```
 
 ### Load Balancer Stuck in "Provisioning"
+
 ```bash
 # Wait 2-3 minutes for AWS to provision
 # Check AWS CloudFormation events
@@ -136,6 +151,7 @@ terraform output monitoring_enabled
 ```
 
 ### Can't Access Grafana/Prometheus
+
 ```bash
 # Verify load balancer is active in AWS Console
 # Check security groups allow inbound traffic on ports 80, 9090
@@ -145,6 +161,7 @@ kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80
 ```
 
 ### Wrong Load Balancer Name
+
 ```bash
 # Verify cluster name
 cd terraform
@@ -154,7 +171,7 @@ terraform output cluster_name_base
 # Default: retail-store-grafana, retail-store-prometheus
 ```
 
-## 🔄 Alternative Access (Port Forwarding)
+## Alternative Access (Port Forwarding)
 
 If you prefer not to use Load Balancers:
 
@@ -168,10 +185,12 @@ kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:909
 # Access: http://localhost:9090
 ```
 
-## 📝 Customization
+## Customization
 
 ### Change Grafana Password
+
 Edit `terraform/addons-direct.tf`:
+
 ```hcl
 grafana = {
   adminPassword = "your-secure-password-here"
@@ -179,7 +198,9 @@ grafana = {
 ```
 
 ### Disable Load Balancers (Use ClusterIP)
+
 Edit `terraform/addons-direct.tf`:
+
 ```hcl
 grafana = {
   service = {
@@ -189,12 +210,14 @@ grafana = {
 ```
 
 ### Change Load Balancer Names
+
 Edit `terraform/addons-direct.tf`:
+
 ```hcl
 "service.beta.kubernetes.io/aws-load-balancer-name" = "my-custom-grafana-lb"
 ```
 
-## 🔒 Security Best Practices
+## Security Best Practices
 
 1. **Change Default Password**: Update Grafana admin password
 2. **Enable HTTPS**: Configure SSL/TLS certificates
@@ -202,14 +225,14 @@ Edit `terraform/addons-direct.tf`:
 4. **Enable Authentication**: Add OAuth or LDAP for Prometheus
 5. **Use Internal Load Balancers**: For production, consider `internal` scheme
 
-## 📚 Additional Resources
+## Additional Resources
 
 - [Grafana Documentation](https://grafana.com/docs/)
 - [Prometheus Documentation](https://prometheus.io/docs/)
 - [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/)
 - [Kube-Prometheus-Stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack)
 
-## 🎯 Quick Reference Commands
+## Quick Reference Commands
 
 ```bash
 # Get all monitoring URLs at once

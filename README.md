@@ -90,21 +90,21 @@ The application has been deliberately over-engineered to generate multiple de-co
 
 This repository uses a **dual-branch approach** for different deployment scenarios:
 
-### 🌐 **Public Application (Main Branch)**
+###  **Public Application (Main Branch)**
 - **Purpose**: Simple deployment with public images
 - **Images**: Public ECR (stable versions like v1.2.2)
 - **Deployment**: Manual control with umbrella chart
 - **Updates**: Manual only
 - **Best for**: Demos, learning, quick testing, simple deployments
 
-### 🏭 **Production (GitOps Branch)**
+###  **Production (GitOps Branch)**
 - **Purpose**: Full production workflow with CI/CD pipeline
 - **Images**: Private ECR (auto-updated with commit hashes)
 - **Deployment**: Automated via GitHub Actions
 - **Updates**: Automatic on code changes
 - **Best for**: Production environments, automated workflows, enterprise deployments
 
-> **📚 For detailed branching strategy, CI/CD setup, and advanced workflows, see [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md)**
+> ** For detailed branching strategy, CI/CD setup, and advanced workflows, see [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md)**
 
 ## Prerequisites
 

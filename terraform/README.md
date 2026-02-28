@@ -2,7 +2,7 @@
 
 This directory contains the Terraform configuration for deploying the retail store application infrastructure on AWS EKS.
 
-## 📁 File Structure
+## File Structure
 
 ```
 terraform-organized/
@@ -17,7 +17,7 @@ terraform-organized/
 └── README.md                  # This file
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Prerequisites
 
@@ -42,6 +42,7 @@ vim terraform.tfvars
 You can deploy in two phases for better control:
 
 #### Phase 1: Deploy EKS Cluster Only
+
 ```bash
 # Initialize Terraform
 terraform init
@@ -51,6 +52,7 @@ terraform apply -target=module.retail_app_eks -target=module.vpc --auto-approve
 ```
 
 #### Phase 2: Deploy Add-ons and ArgoCD
+
 ```bash
 # Get the actual cluster name (with suffix)
 terraform output cluster_name
@@ -63,6 +65,7 @@ terraform apply --auto-approve
 ```
 
 #### Single Phase Deployment (Alternative)
+
 ```bash
 # Initialize Terraform
 terraform init
@@ -95,25 +98,27 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443
 # Password: (from step 1)
 ```
 
-## 📋 What Gets Deployed
+## What Gets Deployed
 
 ### Core Infrastructure
+
 - **VPC** with public and private subnets across 3 AZs
 - **EKS Cluster** with Auto Mode enabled
 - **Security Groups** with appropriate rules
 
 ### Add-ons
+
 - **NGINX Ingress Controller** for load balancing
 - **Cert Manager** for SSL certificate management
 - **ArgoCD** for GitOps deployment
 
 ### Applications (via ArgoCD)
+
 - Retail Store microservices (UI, Catalog, Cart, Orders, Checkout)
 
-## 🔧 Customization
+## Customization
 
 ### Variables
-
 
 ```hcl
 aws_region                = "us-west-2"
@@ -128,6 +133,7 @@ enable_monitoring         = false   # Set to true to enable monitoring
 ### Conflict Prevention
 
 This configuration automatically prevents resource conflicts by:
+
 - Adding a random 4-character suffix to cluster names
 - Using unique KMS key aliases
 - Ensuring resource names don't collide with previous deployments
@@ -144,7 +150,7 @@ enable_aws_load_balancer_controller = true
 enable_kube_prometheus_stack = true
 ```
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 Internet
@@ -172,7 +178,7 @@ Internet
 └─────────────────┘
 ```
 
-## 🧹 Cleanup
+## Cleanup
 
 To destroy all resources:
 
@@ -181,4 +187,3 @@ terraform destroy
 ```
 
 **Note**: This will delete all resources including the EKS cluster and VPC. Make sure to backup any important data first.
-
