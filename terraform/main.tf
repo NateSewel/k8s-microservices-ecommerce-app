@@ -78,7 +78,8 @@ module "retail_app_eks" {
   # Cluster logging (optional - can be expensive)
   cluster_enabled_log_types = []
 
-  tags = local.common_tags
+  tags       = local.common_tags
+  depends_on = [module.vpc]
 }
 
 # =============================================================================
