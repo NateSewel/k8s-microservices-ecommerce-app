@@ -22,15 +22,53 @@ resource "helm_release" "cert_manager" {
 
   # Ensure clean destroy
   wait_for_jobs    = false
-  disable_webhooks = true
+  disable_webhooks = false
 
   values = [
     yamlencode({
       installCRDs = true
+      webhook = {
+        timeoutSeconds = 10
+      }
     })
   ]
 
   depends_on = [module.retail_app_eks]
+}
+
+# Cleanup job for cert-manager on destroy
+resource "null_resource" "cert_manager_cleanup" {
+  triggers = {
+    cluster_name = module.retail_app_eks.cluster_name
+    region       = var.aws_region
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      # Configure kubectl
+      aws eks update-kubeconfig --region ${self.triggers.region} --name ${self.triggers.cluster_name} 2>/dev/null || true
+      
+      # Remove finalizers and delete resources
+      kubectl delete certificates --all -A --timeout=30s 2>/dev/null || true
+      kubectl delete certificaterequests --all -A --timeout=30s 2>/dev/null || true
+      kubectl delete issuers --all -A --timeout=30s 2>/dev/null || true
+      kubectl delete clusterissuers --all --timeout=30s 2>/dev/null || true
+      
+      # Delete webhooks
+      kubectl delete validatingwebhookconfigurations cert-manager-webhook 2>/dev/null || true
+      kubectl delete mutatingwebhookconfigurations cert-manager-webhook 2>/dev/null || true
+      
+      # Remove finalizers from namespace
+      kubectl get namespace cert-manager -o json 2>/dev/null | \
+        jq '.spec.finalizers = []' | \
+        kubectl replace --raw "/api/v1/namespaces/cert-manager/finalize" -f - 2>/dev/null || true
+      
+      sleep 10
+    EOT
+  }
+
+  depends_on = [helm_release.cert_manager]
 }
 
 # =============================================================================
@@ -67,6 +105,34 @@ resource "helm_release" "ingress_nginx" {
   ]
 
   depends_on = [module.retail_app_eks]
+}
+
+# Cleanup job for ingress-nginx on destroy
+resource "null_resource" "ingress_nginx_cleanup" {
+  triggers = {
+    cluster_name = module.retail_app_eks.cluster_name
+    region       = var.aws_region
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      # Configure kubectl
+      aws eks update-kubeconfig --region ${self.triggers.region} --name ${self.triggers.cluster_name} 2>/dev/null || true
+      
+      # Delete LoadBalancer service
+      kubectl delete svc ingress-nginx-controller -n ingress-nginx --timeout=30s 2>/dev/null || true
+      
+      # Remove finalizers from namespace
+      kubectl get namespace ingress-nginx -o json 2>/dev/null | \
+        jq '.spec.finalizers = []' | \
+        kubectl replace --raw "/api/v1/namespaces/ingress-nginx/finalize" -f - 2>/dev/null || true
+      
+      sleep 10
+    EOT
+  }
+
+  depends_on = [helm_release.ingress_nginx]
 }
 
 # =============================================================================

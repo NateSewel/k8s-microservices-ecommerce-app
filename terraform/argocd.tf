@@ -156,6 +156,57 @@ resource "kubectl_manifest" "argocd_projects" {
   depends_on = [helm_release.argocd]
 }
 
+# Cleanup job for ArgoCD on destroy
+resource "null_resource" "argocd_cleanup" {
+  triggers = {
+    cluster_name = module.retail_app_eks.cluster_name
+    region       = var.aws_region
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      # Configure kubectl
+      aws eks update-kubeconfig --region ${self.triggers.region} --name ${self.triggers.cluster_name} 2>/dev/null || true
+      
+      # Delete ArgoCD applications
+      kubectl delete applications --all -n argocd --timeout=30s 2>/dev/null || true
+      kubectl delete applicationsets --all -n argocd --timeout=30s 2>/dev/null || true
+      kubectl delete appprojects --all -n argocd --timeout=30s 2>/dev/null || true
+      
+      # Remove finalizers
+      kubectl get applications -n argocd -o name 2>/dev/null | while read app; do
+        kubectl patch $app -n argocd -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+      done
+      
+      # Delete LoadBalancer service
+      kubectl delete svc argocd-server -n argocd --timeout=30s 2>/dev/null || true
+      
+      # Delete webhooks
+      kubectl delete validatingwebhookconfigurations argocd-application-controller 2>/dev/null || true
+      kubectl delete mutatingwebhookconfigurations argocd-application-controller 2>/dev/null || true
+      
+      # Delete CRDs
+      kubectl delete crd applications.argoproj.io 2>/dev/null || true
+      kubectl delete crd applicationsets.argoproj.io 2>/dev/null || true
+      kubectl delete crd appprojects.argoproj.io 2>/dev/null || true
+      
+      # Remove finalizers from namespace
+      kubectl get namespace argocd -o json 2>/dev/null | \
+        jq '.spec.finalizers = []' | \
+        kubectl replace --raw "/api/v1/namespaces/argocd/finalize" -f - 2>/dev/null || true
+      
+      sleep 10
+    EOT
+  }
+
+  depends_on = [
+    helm_release.argocd,
+    kubectl_manifest.argocd_apps,
+    kubectl_manifest.argocd_projects
+  ]
+}
+
 resource "kubectl_manifest" "argocd_apps" {
   for_each  = fileset("${path.module}/../argocd/applications", "*.yaml")
   yaml_body = file("${path.module}/../argocd/applications/${each.value}")

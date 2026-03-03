@@ -818,6 +818,7 @@ enable_monitoring = false
 - Changed from "nlb" to "external" type
 - Added "ip" target type for EKS Auto Mode
 - Added health check paths for all services
+- Fixed Grafana datasource duplicate issue
 
 **Jenkins Pipeline:**
 - Added pre-deployment validation
@@ -826,6 +827,20 @@ enable_monitoring = false
 - Enhanced error handling and logging
 - Added proper cleanup on destroy
 
+**GitHub Actions:**
+- Complete CI/CD automation
+- Infrastructure deployment workflow
+- Service build and deployment workflow
+- Intelligent change detection
+- ArgoCD integration
+
+**Terraform Destroy:**
+- Added automatic cleanup for Helm releases
+- Added finalizer removal for stuck resources
+- Added webhook cleanup
+- Added LoadBalancer cleanup
+- Created manual cleanup script for edge cases
+
 **Documentation:**
 - Created comprehensive deployment guides
 - Added validation scripts
@@ -833,6 +848,66 @@ enable_monitoring = false
 - Updated all region references
 
 For complete change history, see [terraform/CHANGELOG.md](terraform/CHANGELOG.md).
+
+## Cleanup and Destroy
+
+### Normal Destroy
+
+```bash
+cd terraform
+terraform destroy -auto-approve
+```
+
+The destroy process now includes automatic cleanup of:
+- ArgoCD applications and CRDs
+- Cert-manager certificates and webhooks
+- LoadBalancer services
+- Monitoring stack resources
+- Namespace finalizers
+
+### If Destroy Gets Stuck
+
+If Helm releases get stuck during destroy (timeout errors), run the cleanup script:
+
+```bash
+# Make script executable
+chmod +x cleanup-stuck-resources.sh
+
+# Run cleanup
+./cleanup-stuck-resources.sh
+
+# Then retry destroy
+cd terraform
+terraform destroy -auto-approve
+```
+
+The cleanup script will:
+1. Remove all finalizers from resources
+2. Delete webhooks and validating configurations
+3. Force delete stuck namespaces
+4. Clean up Custom Resource Definitions
+5. Remove LoadBalancer services
+
+### Manual Cleanup (Last Resort)
+
+If automated cleanup fails:
+
+```bash
+# Delete all ArgoCD resources
+kubectl delete applications --all -n argocd --force --grace-period=0
+kubectl delete crd applications.argoproj.io
+
+# Delete cert-manager resources
+kubectl delete certificates --all -A --force --grace-period=0
+kubectl delete crd certificates.cert-manager.io
+
+# Force delete namespaces
+kubectl delete namespace argocd cert-manager ingress-nginx monitoring retail-store --force --grace-period=0
+
+# Then run terraform destroy
+cd terraform
+terraform destroy -auto-approve
+```
 
 ## License
 
