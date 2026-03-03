@@ -21,7 +21,7 @@
 
 This is a sample application designed to illustrate various concepts related to containers on AWS. It presents a sample retail store application including a product catalog, shopping cart and checkout, deployed using modern DevOps practices including GitOps and Infrastructure as Code.
 
-## 📋 Quick Links
+##  Quick Links
 
 - **[DEPLOYMENT_READY.md](DEPLOYMENT_READY.md)** - Start here for deployment
 - **[CONFIGURATION_SUMMARY.md](CONFIGURATION_SUMMARY.md)** - All configuration changes
@@ -545,14 +545,14 @@ Two automated workflows are provided for complete CI/CD:
 - Manual workflow dispatch
 
 **Features:**
-- ✅ Automated validation and formatting checks
-- ✅ Terraform plan on pull requests
-- ✅ Phased deployment (VPC → EKS → Add-ons)
-- ✅ Post-deployment verification
-- ✅ Service URL extraction and reporting
-- ✅ Deployment summary in GitHub
-- ✅ Optional Slack notifications
-- ✅ Manual destroy option
+-  Automated validation and formatting checks
+-  Terraform plan on pull requests
+-  Phased deployment (VPC → EKS → Add-ons)
+-  Post-deployment verification
+-  Service URL extraction and reporting
+-  Deployment summary in GitHub
+-  Optional Slack notifications
+-  Manual destroy option
 
 **Required Secrets:**
 ```yaml
@@ -575,11 +575,11 @@ SLACK_WEBHOOK: (Optional) Slack webhook URL
 - Manual workflow dispatch
 
 **Features:**
-- ✅ Intelligent change detection (builds only changed services)
-- ✅ Parallel builds for multiple services
-- ✅ Automatic ECR push with commit hash tags
-- ✅ ArgoCD sync trigger
-- ✅ Deployment summary
+-  Intelligent change detection (builds only changed services)
+-  Parallel builds for multiple services
+-  Automatic ECR push with commit hash tags
+-  ArgoCD sync trigger
+-  Deployment summary
 
 **Services Supported:**
 - UI (Java/Spring Boot)
@@ -657,27 +657,27 @@ Actions → Terraform Deploy to EKS → Run workflow → Select 'destroy'
 After successful deployment, you'll see:
 
 **Deployment Summary:**
-- ✅ Service URLs (Application, Grafana, Prometheus, ArgoCD)
-- ✅ Credentials
-- ✅ Deployed components list
-- ✅ Cluster information
+-  Service URLs (Application, Grafana, Prometheus, ArgoCD)
+-  Credentials
+-  Deployed components list
+-  Cluster information
 
 **Pull Request Comments:**
-- 📖 Terraform plan output
-- 📊 Resource changes summary
+-  Terraform plan output
+-  Resource changes summary
 
 ### Jenkins Pipeline (Alternative)
 
 An enhanced Jenkins pipeline is provided in `terraform/jenkins` with the following features:
 
 **Features:**
-- ✅ Automated validation before deployment
-- ✅ Phased deployment (VPC → EKS → Add-ons)
-- ✅ Post-deployment verification
-- ✅ Proper cleanup on destroy
-- ✅ Monitoring stack toggle
-- ✅ Region configuration (us-east-1)
-- ✅ Error handling and logging
+-  Automated validation before deployment
+-  Phased deployment (VPC → EKS → Add-ons)
+-  Post-deployment verification
+-  Proper cleanup on destroy
+-  Monitoring stack toggle
+-  Region configuration (us-east-1)
+-  Error handling and logging
 
 **Pipeline Parameters:**
 - `ACTION`: Choose between `apply` or `destroy`
