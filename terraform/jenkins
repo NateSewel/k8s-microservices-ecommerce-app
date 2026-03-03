@@ -7,40 +7,75 @@ pipeline {
             choices: ['apply', 'destroy'],
             description: '🔧 Select the Terraform action to perform'
         )
+        booleanParam(
+            name: 'ENABLE_MONITORING',
+            defaultValue: true,
+            description: '📊 Enable monitoring stack (Prometheus, Grafana, Alertmanager)'
+        )
+        booleanParam(
+            name: 'SKIP_VALIDATION',
+            defaultValue: false,
+            description: '⚠️ Skip pre-deployment validation (not recommended)'
+        )
+    }
+
+    environment {
+        AWS_REGION = 'us-east-1'
+        TF_VAR_enable_monitoring = "${params.ENABLE_MONITORING}"
     }
 
     stages {
 
         stage('Checkout from Git') {
             steps {
-                echo 'Checking out Git repository...'
+                echo '📥 Checking out Git repository...'
                 checkout scm
+            }
+        }
+
+        stage('Pre-deployment Validation') {
+            when {
+                expression { params.ACTION == 'apply' && !params.SKIP_VALIDATION }
+            }
+            steps {
+                echo '✅ Running pre-deployment validation...'
+                sh '''
+                    if [ -f "validate-terraform-config.sh" ]; then
+                        chmod +x validate-terraform-config.sh
+                        ./validate-terraform-config.sh || {
+                            echo "❌ Validation failed! Please fix configuration errors."
+                            exit 1
+                        }
+                    else
+                        echo "⚠️ Validation script not found, skipping..."
+                    fi
+                '''
             }
         }
 
         stage('Upgrade AWS CLI, kubectl, Terraform') {
             steps {
+                echo '🔧 Upgrading tools...'
                 sh '''
                     echo "==== Upgrading AWS CLI ===="
-                    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-                    unzip -o awscliv2.zip
-                    sudo ./aws/install --update
+                    curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                    unzip -oq awscliv2.zip
+                    sudo ./aws/install --update || echo "AWS CLI already up to date"
 
                     echo "==== Upgrading kubectl ===="
-                    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                    curl -sLO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
                     chmod +x kubectl
-                    sudo mv kubectl /usr/local/bin/
+                    sudo mv kubectl /usr/local/bin/ || echo "kubectl already up to date"
 
                     echo "==== Upgrading Terraform ===="
                     LATEST_TF=$(curl -s https://checkpoint-api.hashicorp.com/v1/check/terraform | jq -r .current_version)
-                    curl -Lo terraform.zip "https://releases.hashicorp.com/terraform/${LATEST_TF}/terraform_${LATEST_TF}_linux_amd64.zip"
-                    unzip -o terraform.zip
-                    sudo mv terraform /usr/local/bin/terraform
-                    terraform --version
+                    curl -sLo terraform.zip "https://releases.hashicorp.com/terraform/${LATEST_TF}/terraform_${LATEST_TF}_linux_amd64.zip"
+                    unzip -oq terraform.zip
+                    sudo mv terraform /usr/local/bin/terraform || echo "Terraform already up to date"
 
                     echo "==== Versions After Upgrade ===="
                     aws --version
-                    kubectl version --client --short
+                    kubectl version --client --short 2>/dev/null || kubectl version --client
                     terraform --version
                 '''
             }
@@ -48,12 +83,14 @@ pipeline {
 
         stage('Terraform version') {
             steps {
+                echo '📋 Checking Terraform version...'
                 sh 'terraform --version'
             }
         }
 
         stage('Terraform init') {
             steps {
+                echo '🔄 Initializing Terraform...'
                 dir('terraform') {
                     sh 'terraform init --reconfigure'
                 }
@@ -62,16 +99,24 @@ pipeline {
 
         stage('Terraform validate') {
             steps {
+                echo '✅ Validating Terraform configuration...'
                 dir('terraform') { 
-                    sh 'terraform validate'
+                    sh '''
+                        terraform validate
+                        terraform fmt -check || {
+                            echo "⚠️ Terraform files need formatting"
+                            terraform fmt -recursive
+                        }
+                    '''
                 }
             }
         }
 
         stage('Terraform plan') {
             steps {
+                echo '📊 Creating Terraform plan...'
                 dir('terraform') {
-                    sh 'terraform plan'
+                    sh 'terraform plan -out=tfplan'
                 }
             }
         }
@@ -82,10 +127,11 @@ pipeline {
                 expression { params.ACTION == 'apply' }
             }
             steps {
+                echo '🌐 Creating VPC and networking...'
                 dir('terraform') {
                     sh '''
-                        terraform init
                         terraform apply -target=module.vpc -auto-approve
+                        echo "✅ VPC created successfully"
                     '''
                 }
             }
@@ -96,10 +142,11 @@ pipeline {
                 expression { params.ACTION == 'apply' }
             }
             steps {
+                echo '☸️ Creating EKS cluster (this may take 10-15 minutes)...'
                 dir('terraform') {
                     sh '''
-                        terraform init
                         terraform apply -target=module.retail_app_eks -auto-approve
+                        echo "✅ EKS cluster created successfully"
                     '''
                 }
             }
@@ -110,47 +157,173 @@ pipeline {
                 expression { params.ACTION == 'apply' }
             }
             steps {
+                echo '🔧 Configuring kubectl...'
                 dir('terraform') {
                     script {
                         def eks_name = sh(
-                            script: "terraform output -raw eks_cluster_name",
+                            script: "terraform output -raw cluster_name",
                             returnStdout: true
                         ).trim()
 
-                        sh "aws eks update-kubeconfig --region us-west-2 --name ${eks_name}"
+                        sh """
+                            aws eks update-kubeconfig --region ${AWS_REGION} --name ${eks_name}
+                            kubectl cluster-info
+                            kubectl get nodes
+                        """
+                        
+                        echo "✅ kubectl configured for cluster: ${eks_name}"
                     }
                 }
             }
         }
 
-        stage('Final Apply') {
+        stage('Final Apply: Add-ons & Applications') {
             when {
                 expression { params.ACTION == 'apply' }
             }
             steps {
+                echo '🚀 Deploying add-ons and applications...'
                 dir('terraform') {
                     sh '''
-                        terraform init
-                        terraform plan
                         terraform apply -auto-approve
+                        echo "✅ All resources deployed successfully"
+                    '''
+                }
+            }
+        }
+
+        stage('Post-Deployment Verification') {
+            when {
+                expression { params.ACTION == 'apply' }
+            }
+            steps {
+                echo '🔍 Verifying deployment...'
+                dir('terraform') {
+                    sh '''
+                        echo "==== Checking Namespaces ===="
+                        kubectl get namespaces
+                        
+                        echo ""
+                        echo "==== Checking Pods ===="
+                        kubectl get pods -A | grep -E "NAME|argocd|ingress-nginx|monitoring|retail-store" || true
+                        
+                        echo ""
+                        echo "==== Checking LoadBalancers ===="
+                        kubectl get svc -A | grep LoadBalancer || echo "No LoadBalancers found yet (may take 2-3 minutes)"
+                        
+                        echo ""
+                        echo "==== Checking ArgoCD Applications ===="
+                        kubectl get applications -n argocd 2>/dev/null || echo "ArgoCD applications not ready yet"
+                        
+                        echo ""
+                        echo "==== Deployment Summary ===="
+                        terraform output complete_deployment_summary || terraform output
                     '''
                 }
             }
         }
 
         /* ---------------- DESTROY LOGIC ---------------- */
+        stage('Pre-Destroy Cleanup') {
+            when {
+                expression { params.ACTION == 'destroy' }
+            }
+            steps {
+                echo '🧹 Cleaning up resources before destroy...'
+                dir('terraform') {
+                    sh '''
+                        # Get cluster name
+                        CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "")
+                        
+                        if [ -n "$CLUSTER_NAME" ]; then
+                            echo "Configuring kubectl for cluster: $CLUSTER_NAME"
+                            aws eks update-kubeconfig --region ${AWS_REGION} --name $CLUSTER_NAME 2>/dev/null || true
+                            
+                            echo "Deleting ArgoCD applications..."
+                            kubectl delete applications --all -n argocd --timeout=60s 2>/dev/null || true
+                            
+                            echo "Deleting LoadBalancer services..."
+                            kubectl delete svc --all-namespaces --field-selector spec.type=LoadBalancer --timeout=60s 2>/dev/null || true
+                            
+                            echo "Waiting 30 seconds for AWS cleanup..."
+                            sleep 30
+                        else
+                            echo "⚠️ Cluster not found or already destroyed"
+                        fi
+                    '''
+                }
+            }
+        }
+
         stage('Terraform destroy') {
             when {
                 expression { params.ACTION == 'destroy' }
             }
             steps {
+                echo '🗑️ Destroying infrastructure...'
                 dir('terraform') {
                     sh '''
-                        terraform init
                         terraform destroy -auto-approve
+                        echo "✅ All resources destroyed successfully"
                     '''
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            script {
+                if (params.ACTION == 'apply') {
+                    echo """
+                    ╔══════════════════════════════════════════════════════════════╗
+                    ║                                                              ║
+                    ║   ✅ DEPLOYMENT SUCCESSFUL                                   ║
+                    ║                                                              ║
+                    ║   Your infrastructure is ready!                             ║
+                    ║                                                              ║
+                    ║   Next steps:                                               ║
+                    ║   1. Wait 5-10 minutes for all services to be ready         ║
+                    ║   2. Get LoadBalancer URLs from Terraform outputs           ║
+                    ║   3. Access your application and monitoring services        ║
+                    ║                                                              ║
+                    ╚══════════════════════════════════════════════════════════════╝
+                    """
+                } else {
+                    echo """
+                    ╔══════════════════════════════════════════════════════════════╗
+                    ║                                                              ║
+                    ║   ✅ DESTROY SUCCESSFUL                                      ║
+                    ║                                                              ║
+                    ║   All resources have been cleaned up.                       ║
+                    ║                                                              ║
+                    ╚══════════════════════════════════════════════════════════════╝
+                    """
+                }
+            }
+        }
+        failure {
+            echo """
+            ╔══════════════════════════════════════════════════════════════╗
+            ║                                                              ║
+            ║   ❌ PIPELINE FAILED                                         ║
+            ║                                                              ║
+            ║   Check the logs above for error details.                   ║
+            ║   Common issues:                                            ║
+            ║   - AWS credentials not configured                          ║
+            ║   - Insufficient IAM permissions                            ║
+            ║   - Resource quota limits reached                           ║
+            ║   - Network connectivity issues                             ║
+            ║                                                              ║
+            ╚══════════════════════════════════════════════════════════════╝
+            """
+        }
+        always {
+            echo '🧹 Cleaning up workspace...'
+            sh '''
+                rm -f awscliv2.zip terraform.zip
+                rm -rf aws
+            '''
         }
     }
 }

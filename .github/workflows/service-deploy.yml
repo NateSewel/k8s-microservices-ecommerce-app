@@ -1,0 +1,251 @@
+name: Build and Deploy Services
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/ui/**'
+      - 'src/catalog/**'
+      - 'src/cart/**'
+      - 'src/checkout/**'
+      - 'src/orders/**'
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+
+jobs:
+  detect-changes:
+    name: Detect Changed Services
+    runs-on: ubuntu-latest
+    outputs:
+      ui: ${{ steps.changes.outputs.ui }}
+      catalog: ${{ steps.changes.outputs.catalog }}
+      cart: ${{ steps.changes.outputs.cart }}
+      checkout: ${{ steps.changes.outputs.checkout }}
+      orders: ${{ steps.changes.outputs.orders }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changes
+        id: changes
+        run: |
+          if git diff --name-only HEAD^ HEAD | grep -q "^src/ui/"; then
+            echo "ui=true" >> $GITHUB_OUTPUT
+          else
+            echo "ui=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if git diff --name-only HEAD^ HEAD | grep -q "^src/catalog/"; then
+            echo "catalog=true" >> $GITHUB_OUTPUT
+          else
+            echo "catalog=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if git diff --name-only HEAD^ HEAD | grep -q "^src/cart/"; then
+            echo "cart=true" >> $GITHUB_OUTPUT
+          else
+            echo "cart=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if git diff --name-only HEAD^ HEAD | grep -q "^src/checkout/"; then
+            echo "checkout=true" >> $GITHUB_OUTPUT
+          else
+            echo "checkout=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if git diff --name-only HEAD^ HEAD | grep -q "^src/orders/"; then
+            echo "orders=true" >> $GITHUB_OUTPUT
+          else
+            echo "orders=false" >> $GITHUB_OUTPUT
+          fi
+
+  build-ui:
+    name: Build UI Service
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.ui == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push UI Image
+        working-directory: src/ui
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          docker build -t ${{ env.ECR_REGISTRY }}/retail-store-ui:$IMAGE_TAG .
+          docker push ${{ env.ECR_REGISTRY }}/retail-store-ui:$IMAGE_TAG
+          docker tag ${{ env.ECR_REGISTRY }}/retail-store-ui:$IMAGE_TAG ${{ env.ECR_REGISTRY }}/retail-store-ui:latest
+          docker push ${{ env.ECR_REGISTRY }}/retail-store-ui:latest
+
+  build-catalog:
+    name: Build Catalog Service
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.catalog == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Catalog Image
+        working-directory: src/catalog
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          docker build -t ${{ env.ECR_REGISTRY }}/retail-store-catalog:$IMAGE_TAG .
+          docker push ${{ env.ECR_REGISTRY }}/retail-store-catalog:$IMAGE_TAG
+          docker tag ${{ env.ECR_REGISTRY }}/retail-store-catalog:$IMAGE_TAG ${{ env.ECR_REGISTRY }}/retail-store-catalog:latest
+          docker push ${{ env.ECR_REGISTRY }}/retail-store-catalog:latest
+
+  build-cart:
+    name: Build Cart Service
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.cart == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Cart Image
+        working-directory: src/cart
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          docker build -t ${{ env.ECR_REGISTRY }}/retail-store-cart:$IMAGE_TAG .
+          docker push ${{ env.ECR_REGISTRY }}/retail-store-cart:$IMAGE_TAG
+          docker tag ${{ env.ECR_REGISTRY }}/retail-store-cart:$IMAGE_TAG ${{ env.ECR_REGISTRY }}/retail-store-cart:latest
+          docker push ${{ env.ECR_REGISTRY }}/retail-store-cart:latest
+
+  build-checkout:
+    name: Build Checkout Service
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.checkout == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Checkout Image
+        working-directory: src/checkout
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          docker build -t ${{ env.ECR_REGISTRY }}/retail-store-checkout:$IMAGE_TAG .
+          docker push ${{ env.ECR_REGISTRY }}/retail-store-checkout:$IMAGE_TAG
+          docker tag ${{ env.ECR_REGISTRY }}/retail-store-checkout:$IMAGE_TAG ${{ env.ECR_REGISTRY }}/retail-store-checkout:latest
+          docker push ${{ env.ECR_REGISTRY }}/retail-store-checkout:latest
+
+  build-orders:
+    name: Build Orders Service
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.orders == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Orders Image
+        working-directory: src/orders
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          docker build -t ${{ env.ECR_REGISTRY }}/retail-store-orders:$IMAGE_TAG .
+          docker push ${{ env.ECR_REGISTRY }}/retail-store-orders:$IMAGE_TAG
+          docker tag ${{ env.ECR_REGISTRY }}/retail-store-orders:$IMAGE_TAG ${{ env.ECR_REGISTRY }}/retail-store-orders:latest
+          docker push ${{ env.ECR_REGISTRY }}/retail-store-orders:latest
+
+  trigger-argocd-sync:
+    name: Trigger ArgoCD Sync
+    runs-on: ubuntu-latest
+    needs: [build-ui, build-catalog, build-cart, build-checkout, build-orders]
+    if: always() && (needs.build-ui.result == 'success' || needs.build-catalog.result == 'success' || needs.build-cart.result == 'success' || needs.build-checkout.result == 'success' || needs.build-orders.result == 'success')
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubectl
+        run: |
+          CLUSTER_NAME=$(aws eks list-clusters --region ${{ env.AWS_REGION }} --query 'clusters[?contains(@, `retail-store`)]' --output text)
+          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name $CLUSTER_NAME
+
+      - name: Sync ArgoCD Applications
+        run: |
+          echo "🔄 Triggering ArgoCD sync..."
+          kubectl patch application retail-store-ui -n argocd -p '{"operation":{"initiatedBy":{"username":"github-actions"},"sync":{"revision":"main"}}}' --type merge || true
+          kubectl patch application retail-store-catalog -n argocd -p '{"operation":{"initiatedBy":{"username":"github-actions"},"sync":{"revision":"main"}}}' --type merge || true
+          kubectl patch application retail-store-cart -n argocd -p '{"operation":{"initiatedBy":{"username":"github-actions"},"sync":{"revision":"main"}}}' --type merge || true
+          kubectl patch application retail-store-checkout -n argocd -p '{"operation":{"initiatedBy":{"username":"github-actions"},"sync":{"revision":"main"}}}' --type merge || true
+          kubectl patch application retail-store-orders -n argocd -p '{"operation":{"initiatedBy":{"username":"github-actions"},"sync":{"revision":"main"}}}' --type merge || true
+          
+          echo "✅ ArgoCD sync triggered"
+
+      - name: Create Deployment Summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ## 🚀 Services Deployed
+
+          New container images have been built and pushed to ECR.
+          ArgoCD will automatically sync the applications.
+
+          **Deployed by:** @${{ github.actor }}
+          **Commit:** ${{ github.sha }}
+          EOF

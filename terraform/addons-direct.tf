@@ -89,10 +89,20 @@ resource "helm_release" "kube_prometheus_stack" {
   wait_for_jobs    = false
   replace          = true
   atomic           = false # Don't rollback on failure
-  disable_webhooks = true
+  disable_webhooks = false # Enable webhooks for admission controller
 
   values = [
     yamlencode({
+      # Prometheus Operator configuration
+      prometheusOperator = {
+        admissionWebhooks = {
+          enabled = true
+          patch = {
+            enabled = true
+          }
+        }
+      }
+
       # Disable some components for faster deployment
       kubeStateMetrics = {
         enabled = true
@@ -118,10 +128,13 @@ resource "helm_release" "kube_prometheus_stack" {
         }
         service = {
           type = "LoadBalancer"
+          port = 9090
           annotations = {
-            "service.beta.kubernetes.io/aws-load-balancer-type"   = "nlb"
-            "service.beta.kubernetes.io/aws-load-balancer-scheme" = "internet-facing"
-            "service.beta.kubernetes.io/aws-load-balancer-name"   = "${var.cluster_name}-prometheus"
+            "service.beta.kubernetes.io/aws-load-balancer-type"              = "external"
+            "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type"   = "ip"
+            "service.beta.kubernetes.io/aws-load-balancer-scheme"            = "internet-facing"
+            "service.beta.kubernetes.io/aws-load-balancer-name"              = "${var.cluster_name}-prometheus"
+            "service.beta.kubernetes.io/aws-load-balancer-healthcheck-path"  = "/-/healthy"
           }
         }
       }
@@ -142,10 +155,20 @@ resource "helm_release" "kube_prometheus_stack" {
         }
         service = {
           type = "LoadBalancer"
+          port = 80
           annotations = {
-            "service.beta.kubernetes.io/aws-load-balancer-type"   = "nlb"
-            "service.beta.kubernetes.io/aws-load-balancer-scheme" = "internet-facing"
-            "service.beta.kubernetes.io/aws-load-balancer-name"   = "${var.cluster_name}-grafana"
+            "service.beta.kubernetes.io/aws-load-balancer-type"              = "external"
+            "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type"   = "ip"
+            "service.beta.kubernetes.io/aws-load-balancer-scheme"            = "internet-facing"
+            "service.beta.kubernetes.io/aws-load-balancer-name"              = "${var.cluster_name}-grafana"
+            "service.beta.kubernetes.io/aws-load-balancer-healthcheck-path"  = "/api/health"
+          }
+        }
+        # Disable default datasource to avoid conflicts
+        sidecar = {
+          datasources = {
+            enabled       = true
+            defaultDatasourceEnabled = false
           }
         }
         # Pre-configure Prometheus datasource
@@ -183,10 +206,13 @@ resource "helm_release" "kube_prometheus_stack" {
         }
         service = {
           type = "LoadBalancer"
+          port = 9093
           annotations = {
-            "service.beta.kubernetes.io/aws-load-balancer-type"   = "nlb"
-            "service.beta.kubernetes.io/aws-load-balancer-scheme" = "internet-facing"
-            "service.beta.kubernetes.io/aws-load-balancer-name"   = "${var.cluster_name}-alertmanager"
+            "service.beta.kubernetes.io/aws-load-balancer-type"              = "external"
+            "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type"   = "ip"
+            "service.beta.kubernetes.io/aws-load-balancer-scheme"            = "internet-facing"
+            "service.beta.kubernetes.io/aws-load-balancer-name"              = "${var.cluster_name}-alertmanager"
+            "service.beta.kubernetes.io/aws-load-balancer-healthcheck-path"  = "/-/healthy"
           }
         }
       }

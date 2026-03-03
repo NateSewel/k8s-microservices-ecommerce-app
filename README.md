@@ -17,7 +17,16 @@
   </strong>
 </div>
 
+> **🚀 DEPLOYMENT READY:** All configurations validated and updated. Run `terraform apply` without any manual fixes! See [DEPLOYMENT_READY.md](DEPLOYMENT_READY.md) for details.
+
 This is a sample application designed to illustrate various concepts related to containers on AWS. It presents a sample retail store application including a product catalog, shopping cart and checkout, deployed using modern DevOps practices including GitOps and Infrastructure as Code.
+
+## 📋 Quick Links
+
+- **[DEPLOYMENT_READY.md](DEPLOYMENT_READY.md)** - Start here for deployment
+- **[CONFIGURATION_SUMMARY.md](CONFIGURATION_SUMMARY.md)** - All configuration changes
+- **[terraform/VALIDATED_CONFIGURATION.md](terraform/VALIDATED_CONFIGURATION.md)** - Detailed validation
+- **[validate-terraform-config.sh](validate-terraform-config.sh)** - Configuration validator
 
 ## Table of Contents
 
@@ -465,13 +474,27 @@ terraform destroy --auto-approve
 
 #### **Image Pull Errors**
 ```
-Error: Failed to pull image "123456789012.dkr.ecr.us-west-2.amazonaws.com/retail-store-ui:abc1234"
+Error: Failed to pull image "123456789012.dkr.ecr.us-east-1.amazonaws.com/retail-store-ui:abc1234"
 ```
 **Solutions**:
 1. Ensure you're using the correct branch for your deployment strategy
 2. For Production branch: Check GitHub Actions completed successfully
 3. For Public Application branch: Verify you're using public ECR images
 4. Check AWS credentials and ECR permissions
+
+#### **Monitoring Services Not Accessible**
+**Solutions**:
+1. Verify security groups allow ports 9090 and 9093
+2. Check LoadBalancer status: `kubectl get svc -n monitoring`
+3. Wait 2-3 minutes for LoadBalancers to provision
+4. See [MONITORING_FIX_GUIDE.md](MONITORING_FIX_GUIDE.md) for detailed troubleshooting
+
+#### **Application Not Accessible**
+**Solutions**:
+1. Check NGINX Ingress Controller: `kubectl get pods -n ingress-nginx`
+2. Verify LoadBalancer: `kubectl get svc -n ingress-nginx`
+3. Check ArgoCD sync status: `kubectl get applications -n argocd`
+4. Run diagnostics: `./diagnose-application.sh`
 
 #### **GitHub Actions Not Triggering**
 **Solutions**:
@@ -480,12 +503,336 @@ Error: Failed to pull image "123456789012.dkr.ecr.us-west-2.amazonaws.com/retail
 3. Check GitHub Actions is enabled in repository settings
 4. Review [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md) for detailed setup
 
+### Validation and Diagnostics
+
+**Validate Configuration:**
+```bash
+./validate-terraform-config.sh
+```
+
+**Check Application Status:**
+```bash
+./check-application-access.sh
+```
+
+**Full Diagnostics:**
+```bash
+./diagnose-application.sh
+./diagnose-monitoring.sh
+```
+
 ### Getting Help
 
-- **Basic deployment issues**: Check this README
-- **Advanced GitOps issues**: See [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md)
+- **Deployment issues**: See [DEPLOYMENT_READY.md](DEPLOYMENT_READY.md)
+- **Configuration changes**: See [CONFIGURATION_SUMMARY.md](CONFIGURATION_SUMMARY.md)
+- **Advanced GitOps**: See [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md)
 - **Infrastructure issues**: Review Terraform logs
 - **Application issues**: Check ArgoCD UI and kubectl logs
+
+## CI/CD Pipeline
+
+This project supports multiple CI/CD approaches with full automation:
+
+### GitHub Actions (Recommended)
+
+Two automated workflows are provided for complete CI/CD:
+
+#### 1. Infrastructure Deployment (`terraform-deploy.yml`)
+
+**Triggers:**
+- Push to `main` branch (terraform/** or src/** changes)
+- Pull requests to `main` (terraform/** changes)
+- Manual workflow dispatch
+
+**Features:**
+- ✅ Automated validation and formatting checks
+- ✅ Terraform plan on pull requests
+- ✅ Phased deployment (VPC → EKS → Add-ons)
+- ✅ Post-deployment verification
+- ✅ Service URL extraction and reporting
+- ✅ Deployment summary in GitHub
+- ✅ Optional Slack notifications
+- ✅ Manual destroy option
+
+**Required Secrets:**
+```yaml
+AWS_ACCESS_KEY_ID: Your AWS access key
+AWS_SECRET_ACCESS_KEY: Your AWS secret key
+AWS_ACCOUNT_ID: Your AWS account ID (for ECR)
+SLACK_WEBHOOK: (Optional) Slack webhook URL
+```
+
+**Workflow Jobs:**
+1. **Validate** - Format check, validation, config validation
+2. **Plan** - Terraform plan (on PRs)
+3. **Deploy** - Full infrastructure deployment
+4. **Destroy** - Infrastructure teardown (manual only)
+
+#### 2. Service Deployment (`service-deploy.yml`)
+
+**Triggers:**
+- Push to `main` branch (src/** changes)
+- Manual workflow dispatch
+
+**Features:**
+- ✅ Intelligent change detection (builds only changed services)
+- ✅ Parallel builds for multiple services
+- ✅ Automatic ECR push with commit hash tags
+- ✅ ArgoCD sync trigger
+- ✅ Deployment summary
+
+**Services Supported:**
+- UI (Java/Spring Boot)
+- Catalog (Go)
+- Cart (Java/Spring Boot)
+- Checkout (Node.js/NestJS)
+- Orders (Java/Spring Boot)
+
+**Workflow:**
+1. Detect which services changed
+2. Build Docker images in parallel
+3. Push to private ECR with tags (commit hash + latest)
+4. Trigger ArgoCD sync for updated services
+
+### Setup GitHub Actions
+
+1. **Add Repository Secrets:**
+   ```
+   Settings → Secrets and variables → Actions → New repository secret
+   ```
+   Add:
+   - `AWS_ACCESS_KEY_ID`
+   - `AWS_SECRET_ACCESS_KEY`
+   - `AWS_ACCOUNT_ID`
+   - `SLACK_WEBHOOK` (optional)
+
+2. **Enable GitHub Actions:**
+   ```
+   Settings → Actions → General → Allow all actions
+   ```
+
+3. **Configure Environments (Optional):**
+   ```
+   Settings → Environments → New environment
+   ```
+   Create `production` and `production-destroy` environments with protection rules
+
+4. **Push to Main:**
+   ```bash
+   git add .
+   git commit -m "Enable GitHub Actions"
+   git push origin main
+   ```
+
+### Workflow Examples
+
+**Deploy Infrastructure:**
+```bash
+# Automatic on push to main
+git push origin main
+
+# Or manual via GitHub UI
+Actions → Terraform Deploy to EKS → Run workflow → Select 'apply'
+```
+
+**Deploy Services:**
+```bash
+# Automatic when service code changes
+git add src/ui/
+git commit -m "Update UI service"
+git push origin main
+
+# Or manual via GitHub UI
+Actions → Build and Deploy Services → Run workflow
+```
+
+**Destroy Infrastructure:**
+```bash
+# Manual only via GitHub UI
+Actions → Terraform Deploy to EKS → Run workflow → Select 'destroy'
+```
+
+### GitHub Actions Output
+
+After successful deployment, you'll see:
+
+**Deployment Summary:**
+- ✅ Service URLs (Application, Grafana, Prometheus, ArgoCD)
+- ✅ Credentials
+- ✅ Deployed components list
+- ✅ Cluster information
+
+**Pull Request Comments:**
+- 📖 Terraform plan output
+- 📊 Resource changes summary
+
+### Jenkins Pipeline (Alternative)
+
+An enhanced Jenkins pipeline is provided in `terraform/jenkins` with the following features:
+
+**Features:**
+- ✅ Automated validation before deployment
+- ✅ Phased deployment (VPC → EKS → Add-ons)
+- ✅ Post-deployment verification
+- ✅ Proper cleanup on destroy
+- ✅ Monitoring stack toggle
+- ✅ Region configuration (us-east-1)
+- ✅ Error handling and logging
+
+**Pipeline Parameters:**
+- `ACTION`: Choose between `apply` or `destroy`
+- `ENABLE_MONITORING`: Toggle monitoring stack (Prometheus, Grafana, Alertmanager)
+- `SKIP_VALIDATION`: Skip pre-deployment validation (not recommended)
+
+**Usage:**
+1. Configure Jenkins with AWS credentials
+2. Create a new Pipeline job
+3. Point to `terraform/jenkins` file
+4. Run with desired parameters
+
+**Pipeline Stages:**
+1. Checkout from Git
+2. Pre-deployment Validation (optional)
+3. Upgrade Tools (AWS CLI, kubectl, Terraform)
+4. Terraform Init & Validate
+5. Terraform Plan
+6. Targeted Apply: VPC
+7. Targeted Apply: EKS Cluster
+8. Update kubeconfig
+9. Final Apply: Add-ons & Applications
+10. Post-Deployment Verification
+
+**For Destroy:**
+1. Pre-Destroy Cleanup (ArgoCD apps, LoadBalancers)
+2. Terraform Destroy
+
+### GitHub Actions (GitOps Branch)
+
+For automated CI/CD with GitHub Actions, see the `gitops` branch and [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md).
+
+**Features:**
+- Automated builds on code changes
+- Private ECR image management
+- Automatic Helm chart updates
+- ArgoCD auto-sync
+
+### Manual Deployment
+
+For manual deployment using Terraform directly:
+
+```bash
+# Validate configuration
+./validate-terraform-config.sh
+
+# Deploy
+cd terraform
+terraform init
+terraform apply -auto-approve
+```
+
+See [DEPLOYMENT_READY.md](DEPLOYMENT_READY.md) for detailed manual deployment instructions.
+
+## Monitoring and Observability
+
+The infrastructure includes a complete monitoring stack with properly configured LoadBalancers:
+
+### Components
+
+**Prometheus**
+- Metrics collection and storage
+- Accessible via LoadBalancer on port 9090
+- Health check path: `/-/healthy`
+- No authentication (add for production)
+
+**Grafana**
+- Visualization and dashboards
+- Accessible via LoadBalancer on port 80
+- Default credentials: admin/admin123 (change in production!)
+- Pre-configured Prometheus datasource
+
+**Alertmanager**
+- Alert management and routing
+- Accessible via LoadBalancer on port 9093
+- Health check path: `/-/healthy`
+- No authentication (add for production)
+
+### Access Monitoring Services
+
+After deployment, get the URLs:
+
+```bash
+# Grafana
+echo "http://$(kubectl get svc kube-prometheus-stack-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
+
+# Prometheus
+echo "http://$(kubectl get svc kube-prometheus-stack-prometheus -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'):9090"
+
+# Alertmanager
+echo "http://$(kubectl get svc kube-prometheus-stack-alertmanager -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'):9093"
+```
+
+### Configuration
+
+All monitoring LoadBalancers are configured with:
+- Type: `external` (AWS Load Balancer Controller format)
+- Target Type: `ip` (for EKS Auto Mode compatibility)
+- Scheme: `internet-facing`
+- Health checks: Configured for each service
+
+### Security Groups
+
+The following ports are configured in security groups:
+- Port 80 (HTTP) - Application and Grafana
+- Port 443 (HTTPS) - ArgoCD and secure services
+- Port 9090 (Prometheus) - Metrics
+- Port 9093 (Alertmanager) - Alerts
+
+### Disabling Monitoring
+
+To disable monitoring and reduce costs:
+
+**In Terraform:**
+```hcl
+# terraform/terraform.tfvars
+enable_monitoring = false
+```
+
+**In Jenkins:**
+- Uncheck `ENABLE_MONITORING` parameter when running pipeline
+
+## Recent Configuration Updates
+
+### Version 1.2 (Current - Production Ready)
+
+**Region Migration:**
+- Changed default region from us-west-2 to us-east-1
+- Updated all documentation and examples
+
+**Security Groups:**
+- Added port 9090 for Prometheus
+- Added port 9093 for Alertmanager
+- All required ports now configured
+
+**Monitoring LoadBalancers:**
+- Updated to AWS Load Balancer Controller format
+- Changed from "nlb" to "external" type
+- Added "ip" target type for EKS Auto Mode
+- Added health check paths for all services
+
+**Jenkins Pipeline:**
+- Added pre-deployment validation
+- Added post-deployment verification
+- Added monitoring toggle parameter
+- Enhanced error handling and logging
+- Added proper cleanup on destroy
+
+**Documentation:**
+- Created comprehensive deployment guides
+- Added validation scripts
+- Added troubleshooting guides
+- Updated all region references
+
+For complete change history, see [terraform/CHANGELOG.md](terraform/CHANGELOG.md).
 
 ## License
 

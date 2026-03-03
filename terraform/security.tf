@@ -44,3 +44,25 @@ resource "aws_security_group_rule" "nodeport_access" {
   cidr_blocks       = [module.vpc.vpc_cidr_block]
   security_group_id = module.retail_app_eks.cluster_security_group_id
 }
+
+# Allow Prometheus access from internet
+resource "aws_security_group_rule" "internet_to_prometheus" {
+  description       = "Allow Prometheus traffic from internet to LoadBalancer"
+  type              = "ingress"
+  from_port         = 9090
+  to_port           = 9090
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = module.retail_app_eks.cluster_security_group_id
+}
+
+# Allow Alertmanager access from internet
+resource "aws_security_group_rule" "internet_to_alertmanager" {
+  description       = "Allow Alertmanager traffic from internet to LoadBalancer"
+  type              = "ingress"
+  from_port         = 9093
+  to_port           = 9093
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = module.retail_app_eks.cluster_security_group_id
+}
